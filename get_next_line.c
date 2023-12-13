@@ -5,120 +5,110 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: gganteau <gganteau@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2023/05/03 10:52:15 by gganteau          #+#    #+#             */
-/*   Updated: 2023/06/21 09:58:38 by gganteau         ###   ########.fr       */
+/*   Created: 2023/12/12 13:09:32 by gganteau          #+#    #+#             */
+/*   Updated: 2023/12/13 13:02:24 by gganteau         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "get_next_line.h"
 #include <stdio.h>
+#include <unistd.h>
+
+void	reader(char *rest, char *buffer, char **prest, char **pline)
+{
+	char	*temp;
+	char	*delimiter;
+	char	*r;
+	char	*l;
+
+	r = NULL;
+	l = NULL;
+	if (rest == NULL)
+		rest = ft_strdup("");//abriendo el resto para que se pueda usar en la lectura (proximas)
+	temp = rest;
+	r = ft_strjoin(rest, buffer);
+	free(temp);
+	delimiter = ft_strchr(r, '\n');
+	if (delimiter != NULL)
+	{
+		l = ft_strdup2(r);
+		temp = r;
+		if (ft_strlen(delimiter) > 1) // si en delimiter hay algo mas que \n 
+			r = ft_strdup(delimiter + 1); // lo meto en r
+		else
+			r = NULL;
+		free(temp);
+	}
+	*prest = r;
+	*pline = l;
+}
+
+void	restmaker(char *rest, char *line, char **prest, char **pline)
+{
+	char	*temp;
+	char	*delimiter;
+
+	if (!ft_strchr(rest, '\n')) // si solo queda una linea en el rest i.e no hay mas \n
+	{
+		temp = rest; // paso el contenido de rest a line usando una 
+		rest = ""; // variable temporal y vacio el rest
+		line = temp;
+	}
+	else // si hay mas lineas en el resto i.e existen mas \n
+	{
+		delimiter = ft_strchr(rest, '\n'); // saco cada linea similar a como he hecho en reader
+		line = ft_strdup2(rest);
+		temp = rest;
+		if (ft_strlen(delimiter) > 1) // si en delimiter hay algo despues de \n lo metera en rest
+			rest = ft_strdup(delimiter + 1);
+		else
+			rest = NULL;
+		free(temp);
+	}
+	*prest = rest;
+	*pline = line;
+}
 
 char	*get_next_line(int fd)
 {
-	char		*buffer;
-	char		*line_read;
-	char		*aux;
-	static char	*rest;
-	int			bytesRead;
-	
-	buffer = malloc(sizeof (char) * BUFFER_SIZE + 1);
-	if (!buffer)
+	static char	*rest = NULL;
+	char		buffer[BUFFER_SIZE + 1];
+	ssize_t		bytesread;
+	char		*line;
+
+	if (fd < 0)
 		return (NULL);
-	if (fd < 0 || BUFFER_SIZE <= 0 || read(fd, buffer, 0) < 0)
+	bytesread = read(fd, buffer, BUFFER_SIZE);
+	if (bytesread < 0)
+		free (rest);// libero el resto para que no haya memoria ocupada
+	while (bytesread > 0)
 	{
-		free (buffer);
-		buffer = NULL;
-		return (NULL);
+		buffer[bytesread] = '\0';
+		reader(rest, buffer, &rest, &line); // uso puntero de puntero para procesar resto y line en la funcion de lectura y conservar lo obtenido
+		if (line)
+			return (line);
+		bytesread = read(fd, buffer, BUFFER_SIZE);
 	}
-	line_read = "";
-	if (rest)
-		line_read = ft_strdup(rest);
-	if (buffer == NULL)
-		return (NULL);
-	
-	bytesRead = 1;
-	while (bytesRead > 0)
+	if (bytesread == 0 && rest != NULL && ft_strlen(rest) > 0)
 	{
-		bytesRead = read(fd, buffer, BUFFER_SIZE);
-		if(bytesRead == -1)
-		{
-			free (buffer);
-			return (NULL);
-		}
-		if (bytesRead != 0)
-		{
-			buffer[bytesRead] = '\0';
-			if (*line_read)
-				free(line_read);
-			line_read = ft_strjoin2(line_read, buffer);
-		}
-		if (bytesRead == 0 && line_read[0] == '\0')
-		{
-			free(buffer);
-			return (NULL);
-		}
-	//	printf("buffer1: %s\n", buffer);
-		if (ft_strchr(buffer, '\n'))
-			break;
-	//	free (buffer); este free empeora
-		//buffer[bytesRead] = '\0';
-		if (bytesRead == 0)
-			break;
-	//	free (buffer); este free empeora
+		restmaker(rest, line, &rest, &line);
+		return (line);
 	}
-	if (bytesRead == 0 && *line_read)
-	{
-		rest = ft_strchr(line_read, '\n');
-		if (rest)
-			rest++;
-		free(buffer); //este free no consigue nada
-		aux = ft_substr(line_read, 0, rest - line_read);
-		free(line_read);
-		return (aux);
-		//printf("buffer2: %s\n", buffer);
-	}
-	else
-	{
-		rest = "";
-		rest = ft_strchr(buffer, '\n');
-		if (rest)
-			rest++;
-	//	printf("buffer3: %s\n", buffer);
-		free(buffer); //este free empeora los leaks
-	}
-	return (line_read);
-	//free (buffer); este free no mejora nada
+	rest = NULL;
+	return (NULL);
 }
-// void leaks(void)
-// {
-// 	system("leaks -q a.out");
-// }
+/*
+#include <fcntl.h>
+int	main()
+{
+	int		fd;
+	int		i = 1;
 
-// #include <stddef.h>
-// #include <unistd.h>
-// #include <stdlib.h>
-// #include <stdio.h>
-// #include <fcntl.h>
-// int main ()
-// {
-// 	int		fd;
-// 	char *line;
-// 	int i;
-
-// 	atexit(leaks);
-// 	i = 0;
-// 	fd = open ("tester.txt", O_RDONLY);
-// 	while(i < 2)
-// 	{
-// 		line = get_next_line(fd);
-// 		++i;
-// 		printf("Esta es la linea: %s\n", line);
-// 		free(line);
-// 	}
-// 	// printf ("|%s|\n", get_next_line(fd));
-// 	// printf ("<%s>\n", get_next_line(fd));
-// 	// printf ("*%s*\n", get_next_line(fd));
-// 	// printf ("-%s-\n", get_next_line(fd));
-// 	// printf ("$%s$\n", get_next_line(fd));
-// 	return (0);
-// }
+	fd = open("limits.txt", O_RDONLY);
+	while(i <= 20)
+	{
+		printf("%i- %s", i, get_next_line(fd));
+		i++;
+	}
+	return (0);
+}*/
